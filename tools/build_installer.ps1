@@ -27,6 +27,7 @@ New-Item -ItemType Directory -Path $DistDir  -Force | Out-Null
 $payloadMap = @(
     @{ Src = (Join-Path $BinSrc "dwmapi.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\dwmapi.dll" },
     @{ Src = (Join-Path $DistDir "xinput1_4.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll" },
+    @{ Src = (Join-Path $DistDir "hid.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\hid.dll" },
     @{ Src = (Join-Path $Ue4ssSrc "UE4SS.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.dll" },
     @{ Src = (Join-Path $Ue4ssSrc "LICENSE"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\LICENSE" },
     @{ Src = (Join-Path $Ue4ssSrc "UE4SS-settings.ini"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS-settings.ini" },

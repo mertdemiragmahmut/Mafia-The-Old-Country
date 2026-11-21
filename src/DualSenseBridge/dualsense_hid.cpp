@@ -12,15 +12,49 @@
 #include <string>
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 
-// Link hints (also passed in build.bat)
-#pragma comment(lib, "hid.lib")
+// setupapi only; real System32\hid.dll is loaded dynamically so our local hid.dll proxy never blocks us
 #pragma comment(lib, "setupapi.lib")
 
 namespace ds {
 
 // Logging helper declared in dllmain.cpp
 void BridgeLog(const char* fmt, ...);
+
+namespace {
+using FnHidD_GetHidGuid = void (__stdcall *)(LPGUID);
+using FnHidD_GetAttributes = BOOLEAN (__stdcall *)(HANDLE, PHIDD_ATTRIBUTES);
+using FnHidD_GetPreparsedData = BOOLEAN (__stdcall *)(HANDLE, PHIDP_PREPARSED_DATA*);
+using FnHidD_FreePreparsedData = BOOLEAN (__stdcall *)(PHIDP_PREPARSED_DATA);
+using FnHidP_GetCaps = NTSTATUS (__stdcall *)(PHIDP_PREPARSED_DATA, PHIDP_CAPS);
+
+HMODULE g_sysHidDll = nullptr;
+std::once_flag g_sysHidOnce;
+FnHidD_GetHidGuid pfnHidD_GetHidGuid = nullptr;
+FnHidD_GetAttributes pfnHidD_GetAttributes = nullptr;
+FnHidD_GetPreparsedData pfnHidD_GetPreparsedData = nullptr;
+FnHidD_FreePreparsedData pfnHidD_FreePreparsedData = nullptr;
+FnHidP_GetCaps pfnHidP_GetCaps = nullptr;
+
+bool EnsureRealHidLoaded() {
+    std::call_once(g_sysHidOnce, []() {
+        wchar_t sysDir[MAX_PATH]{};
+        GetSystemDirectoryW(sysDir, MAX_PATH);
+        std::wstring path = std::wstring(sysDir) + L"\\hid.dll";
+        g_sysHidDll = LoadLibraryW(path.c_str());
+        if (g_sysHidDll) {
+            pfnHidD_GetHidGuid = reinterpret_cast<FnHidD_GetHidGuid>(GetProcAddress(g_sysHidDll, "HidD_GetHidGuid"));
+            pfnHidD_GetAttributes = reinterpret_cast<FnHidD_GetAttributes>(GetProcAddress(g_sysHidDll, "HidD_GetAttributes"));
+            pfnHidD_GetPreparsedData = reinterpret_cast<FnHidD_GetPreparsedData>(GetProcAddress(g_sysHidDll, "HidD_GetPreparsedData"));
+            pfnHidD_FreePreparsedData = reinterpret_cast<FnHidD_FreePreparsedData>(GetProcAddress(g_sysHidDll, "HidD_FreePreparsedData"));
+            pfnHidP_GetCaps = reinterpret_cast<FnHidP_GetCaps>(GetProcAddress(g_sysHidDll, "HidP_GetCaps"));
+        }
+    });
+    return pfnHidD_GetHidGuid && pfnHidD_GetAttributes && pfnHidD_GetPreparsedData &&
+           pfnHidD_FreePreparsedData && pfnHidP_GetCaps;
+}
+} // namespace
 
 static uint64_t NowMs() {
     return GetTickCount64();
@@ -222,8 +256,11 @@ void DualSenseHidManager::ComputeCurrentLed(uint64_t nowMs, uint8_t& outR, uint8
 
 bool DualSenseHidManager::FindAndOpenWiredDualSense(void*& outHandle, uint16_t& outPid, uint16_t& outVer) {
     outHandle = INVALID_HANDLE_VALUE;
+    if (!EnsureRealHidLoaded()) {
+        return false;
+    }
     GUID hidGuid{};
-    HidD_GetHidGuid(&hidGuid);
+    pfnHidD_GetHidGuid(&hidGuid);
 
     HDEVINFO devInfo = SetupDiGetClassDevsW(&hidGuid, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (devInfo == INVALID_HANDLE_VALUE) {
@@ -265,13 +302,13 @@ bool DualSenseHidManager::FindAndOpenWiredDualSense(void*& outHandle, uint16_t& 
         HIDD_ATTRIBUTES attrs{};
         attrs.Size = sizeof(HIDD_ATTRIBUTES);
         bool match = false;
-        if (HidD_GetAttributes(h, &attrs) &&
+        if (pfnHidD_GetAttributes(h, &attrs) &&
             attrs.VendorID == SONY_VID &&
             (attrs.ProductID == DUALSENSE_PID || attrs.ProductID == DUALSENSE_EDGE_PID)) {
             PHIDP_PREPARSED_DATA ppd = nullptr;
-            if (HidD_GetPreparsedData(h, &ppd)) {
+            if (pfnHidD_GetPreparsedData(h, &ppd)) {
                 HIDP_CAPS caps{};
-                if (HidP_GetCaps(ppd, &caps) == HIDP_STATUS_SUCCESS) {
+                if (pfnHidP_GetCaps(ppd, &caps) == HIDP_STATUS_SUCCESS) {
                     // Wired USB DualSense exposes 64-byte input / 48-byte output
                     if (caps.UsagePage == 0x01 && caps.InputReportByteLength == USB_INPUT_REPORT_LEN &&
                         caps.OutputReportByteLength == USB_OUTPUT_REPORT_LEN) {
@@ -280,7 +317,7 @@ bool DualSenseHidManager::FindAndOpenWiredDualSense(void*& outHandle, uint16_t& 
                         outVer = attrs.VersionNumber;
                     }
                 }
-                HidD_FreePreparsedData(ppd);
+                pfnHidD_FreePreparsedData(ppd);
             }
         }
         if (match) {
@@ -460,7 +497,6 @@ void DualSenseHidManager::WorkerLoop() {
         bool firstSent = false;
         uint8_t lastRL = 0, lastRR = 0, lastR = 0, lastG = 0, lastB = 0, lastPL = 0;
         TriggerConfig lastL2{}, lastR2{};
-        uint64_t lastLedSendMs = 0;
         int ledLogCount = 0;
 
         while (running_ && deviceAlive) {
@@ -490,12 +526,11 @@ void DualSenseHidManager::WorkerLoop() {
             }
 
             bool ledChanged = !firstSent || (curR != lastR) || (curG != lastG) || (curB != lastB);
-            bool ledKeepalive = firstSent && ((now - lastLedSendMs) >= 1500);
             bool sendRumble = !firstSent || (curRL != lastRL) || (curRR != lastRR);
             bool sendR2 = !firstSent || (curR2 != lastR2);
             bool sendL2 = !firstSent || (curL2 != lastL2);
-            bool sendLed = ledChanged || ledKeepalive;
-            bool sendPlayerLeds = !firstSent || (curPL != lastPL) || ledKeepalive;
+            bool sendLed = ledChanged;
+            bool sendPlayerLeds = !firstSent || (curPL != lastPL);
 
             needSend = sendRumble || sendR2 || sendL2 || sendLed || sendPlayerLeds;
             if (needSend) {
@@ -509,9 +544,6 @@ void DualSenseHidManager::WorkerLoop() {
                 if (ledChanged && ledLogCount < 10) {
                     ++ledLogCount;
                     BridgeLog("HID: LED -> RGB=(%u,%u,%u) playerLeds=0x%02X", curR, curG, curB, curPL);
-                }
-                if (sendLed) {
-                    lastLedSendMs = now;
                 }
                 firstSent = true;
                 lastRL = curRL;

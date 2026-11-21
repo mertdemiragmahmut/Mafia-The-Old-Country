@@ -22,8 +22,11 @@ namespace MafiaTOCDualSenseInstaller
         {
             @"MafiaTheOldCountry\Binaries\Win64\dwmapi.dll",
             @"MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll",
+            @"MafiaTheOldCountry\Binaries\Win64\hid.dll",
             @"MafiaTheOldCountry\Binaries\Win64\DualSenseBridge.log",
+            @"MafiaTheOldCountry\Binaries\Win64\DualSenseHidProxy.log",
             @"MafiaTheOldCountry\Binaries\Win64\ue4ss\DualSenseBridge.log",
+            @"MafiaTheOldCountry\Binaries\Win64\ue4ss\DualSenseHidProxy.log",
             @"MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.log",
             @"MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.dll",
             @"MafiaTheOldCountry\Binaries\Win64\ue4ss\LICENSE",
@@ -295,6 +298,7 @@ namespace MafiaTOCDualSenseInstaller
                 {
                     @"MafiaTheOldCountry\Binaries\Win64\dwmapi.dll",
                     @"MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll",
+                    @"MafiaTheOldCountry\Binaries\Win64\hid.dll",
                     @"MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.dll",
                     @"MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\mods.txt",
                     @"MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\MafiaDualSenseMod\Scripts\main.lua"
@@ -395,7 +399,7 @@ namespace MafiaTOCDualSenseInstaller
             string ue4ssRoot = Path.Combine(gameRoot, BinRelDir, "ue4ss");
             if (Directory.Exists(ue4ssRoot))
             {
-                foreach (string extra in new[] { "UE4SS.log", "DualSenseBridge.log", "MafiaDualSenseMod.manifest.txt" })
+                foreach (string extra in new[] { "UE4SS.log", "DualSenseBridge.log", "DualSenseHidProxy.log", "MafiaDualSenseMod.manifest.txt" })
                 {
                     string p = Path.Combine(ue4ssRoot, extra);
                     if (File.Exists(p))
@@ -422,7 +426,8 @@ namespace MafiaTOCDualSenseInstaller
             }
 
             if (File.Exists(Path.Combine(gameRoot, @"MafiaTheOldCountry\Binaries\Win64\dwmapi.dll")) ||
-                File.Exists(Path.Combine(gameRoot, @"MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll")))
+                File.Exists(Path.Combine(gameRoot, @"MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll")) ||
+                File.Exists(Path.Combine(gameRoot, @"MafiaTheOldCountry\Binaries\Win64\hid.dll")))
             {
                 WriteColor("UYARI: Bazı DLL dosyaları kilitli olduğu için silinemedi.", ConsoleColor.Yellow);
                 return 7;
@@ -442,6 +447,7 @@ namespace MafiaTOCDualSenseInstaller
             {
                 @"MafiaTheOldCountry\Binaries\Win64\dwmapi.dll",
                 @"MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll",
+                @"MafiaTheOldCountry\Binaries\Win64\hid.dll",
                 @"MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.dll",
                 @"MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\mods.txt",
                 @"MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\MafiaDualSenseMod\Scripts\main.lua"
