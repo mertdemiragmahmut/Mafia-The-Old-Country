@@ -1,0 +1,17 @@
+# Build & packaging outputs
+build/
+dist/
+
+# Downloaded archives & live reflection dumps
+downloads/
+dumps/
+
+# Compiled binaries & logs
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
+*.pdb
+*.zip
+*.log
