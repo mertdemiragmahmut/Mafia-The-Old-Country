@@ -63,7 +63,7 @@ private:
     TriggerConfig triggerR2_{};
 
     // Lightbar layering: default -> baseOverride -> specialEffect
-    LedBehavior defaultLed_{LedEffectType::Default, 18, 56, 130, 0.0f, 1.0f}; // subtle Sicilian night blue
+    LedBehavior defaultLed_{LedEffectType::Default, 0, 85, 235, 0.0f, 1.0f}; // visible Mediterranean blue
     bool hasBaseOverride_ = false;
     LedBehavior baseOverride_{};
     uint64_t baseStartMs_ = 0;

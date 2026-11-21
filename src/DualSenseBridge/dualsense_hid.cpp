@@ -442,9 +442,26 @@ void DualSenseHidManager::WorkerLoop() {
         std::atomic<bool> deviceAlive{true};
         std::thread reader(&DualSenseHidManager::ReadThreadLoop, this, h, std::ref(deviceAlive));
 
+        // Unlock DualSense lightbar host RGB control from firmware pulse mode before first color packet
+        {
+            uint8_t initLedReport[USB_OUTPUT_REPORT_LEN]{};
+            TriggerConfig offCfg{};
+            uint8_t initPl = 0x04;
+            {
+                std::lock_guard<std::mutex> lk(outMutex_);
+                initPl = playerLeds_;
+            }
+            BuildUsbOutputReport(initLedReport, 0, 0, offCfg, offCfg, 0, 0, 0, initPl,
+                                 false, false, false, false, false, true);
+            OverlappedWrite(h, initLedReport, USB_OUTPUT_REPORT_LEN, 250);
+            Sleep(15);
+        }
+
         bool firstSent = false;
         uint8_t lastRL = 0, lastRR = 0, lastR = 0, lastG = 0, lastB = 0, lastPL = 0;
         TriggerConfig lastL2{}, lastR2{};
+        uint64_t lastLedSendMs = 0;
+        int ledLogCount = 0;
 
         while (running_ && deviceAlive) {
             uint64_t now = NowMs();
@@ -472,20 +489,29 @@ void DualSenseHidManager::WorkerLoop() {
                 outputDirty_ = false;
             }
 
+            bool ledChanged = !firstSent || (curR != lastR) || (curG != lastG) || (curB != lastB);
+            bool ledKeepalive = firstSent && ((now - lastLedSendMs) >= 1500);
             bool sendRumble = !firstSent || (curRL != lastRL) || (curRR != lastRR);
             bool sendR2 = !firstSent || (curR2 != lastR2);
             bool sendL2 = !firstSent || (curL2 != lastL2);
-            bool sendLed = !firstSent || (curR != lastR) || (curG != lastG) || (curB != lastB);
-            bool sendPlayerLeds = !firstSent || (curPL != lastPL);
+            bool sendLed = ledChanged || ledKeepalive;
+            bool sendPlayerLeds = !firstSent || (curPL != lastPL) || ledKeepalive;
 
             needSend = sendRumble || sendR2 || sendL2 || sendLed || sendPlayerLeds;
             if (needSend) {
                 BuildUsbOutputReport(report, curRL, curRR, curL2, curR2, curR, curG, curB, curPL,
-                                     sendRumble, sendR2, sendL2, sendLed, sendPlayerLeds);
+                                     sendRumble, sendR2, sendL2, sendLed, sendPlayerLeds, false);
                 if (!OverlappedWrite(h, report, USB_OUTPUT_REPORT_LEN, 250)) {
                     BridgeLog("HID: Output WriteFile failed, reconnecting...");
                     deviceAlive = false;
                     break;
+                }
+                if (ledChanged && ledLogCount < 10) {
+                    ++ledLogCount;
+                    BridgeLog("HID: LED -> RGB=(%u,%u,%u) playerLeds=0x%02X", curR, curG, curB, curPL);
+                }
+                if (sendLed) {
+                    lastLedSendMs = now;
                 }
                 firstSent = true;
                 lastRL = curRL;

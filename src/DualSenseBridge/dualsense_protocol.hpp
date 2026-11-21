@@ -251,12 +251,14 @@ inline void BuildUsbOutputReport(
     bool sendR2 = true,
     bool sendL2 = true,
     bool sendLed = true,
-    bool sendPlayerLeds = true)
+    bool sendPlayerLeds = true,
+    bool sendLightbarSetup = false)
 {
     std::memset(buf48, 0, USB_OUTPUT_REPORT_LEN);
     buf48[0] = 0x02; // USB Report ID
     buf48[1] = (sendRumble ? 0x03 : 0x00) | (sendR2 ? 0x04 : 0x00) | (sendL2 ? 0x08 : 0x00);
-    buf48[2] = (sendLed ? 0x04 : 0x00) | (sendPlayerLeds ? 0x10 : 0x00);
+    bool writeLeds = sendLed || sendPlayerLeds;
+    buf48[2] = writeLeds ? ((sendLed ? 0x04 : 0x00) | (sendPlayerLeds ? 0x10 : 0x00)) : 0x00;
     if (sendRumble) {
         buf48[3] = rumbleRight;
         buf48[4] = rumbleLeft;
@@ -267,12 +269,12 @@ inline void BuildUsbOutputReport(
     if (sendL2) {
         EncodeTriggerBlock(&buf48[22], l2);
     }
-    buf48[42] = 0x00; // lightbar_setup = 0 (do not set LIGHT_OUT 0x02)
-    buf48[43] = 0x00;
-    if (sendPlayerLeds) {
+    // DS_OUTPUT_VALID_FLAG2_LIGHTBAR_SETUP_CONTROL_ENABLE unlocks host RGB from firmware boot animation
+    buf48[39] = sendLightbarSetup ? 0x02 : 0x00;
+    buf48[42] = 0x02; // DS_OUTPUT_LIGHTBAR_SETUP_LIGHT_OUT / LED control mode
+    buf48[43] = 0x00; // High LED brightness
+    if (writeLeds) {
         buf48[44] = playerLeds & 0x1F;
-    }
-    if (sendLed) {
         buf48[45] = red;
         buf48[46] = green;
         buf48[47] = blue;

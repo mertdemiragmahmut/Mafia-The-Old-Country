@@ -144,7 +144,15 @@ int main(int argc, char** argv) {
               "Pipe PING -> PONG");
 
         reply.clear();
-        bool gotState = PipeTransactWin32(hPipe, "STATE\n", &reply);
+        bool gotState = false;
+        for (int i = 0; i < 15; ++i) {
+            gotState = PipeTransactWin32(hPipe, "STATE\n", &reply);
+            if (gotState && reply.find("CONNECTED=1") != std::string::npos &&
+                reply.find("WASAPI=1") != std::string::npos) {
+                break;
+            }
+            Sleep(100);
+        }
         std::printf("  STATE reply: %s\n", reply.c_str());
         Check(gotState && reply.find("CONNECTED=1") != std::string::npos,
               "Pipe STATE reports CONNECTED=1");
