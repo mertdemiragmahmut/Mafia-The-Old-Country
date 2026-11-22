@@ -592,6 +592,69 @@ local function isCinematicPlaying()
     return playing
 end
 
+local VEHICLE_R2_FIXED_CMD = "TRIG_SLOPE 1 2 9 1 3"
+local VEHICLE_L2_FIXED_CMD = "TRIG_SLOPE 0 2 9 1 4"
+local playerDrivingVehicle = false
+local activeVehicleRef = nil
+
+local function applyFixedVehicleTriggers()
+    if not bridgeState.connected then return end
+    sendFallbackTrigger(1, VEHICLE_R2_FIXED_CMD)
+    sendFallbackTrigger(0, VEHICLE_L2_FIXED_CMD)
+end
+
+local function setPlayerDrivingState(driving, vehObj, reason)
+    if driving then
+        activeVehicleRef = vehObj or activeVehicleRef
+        if not playerDrivingVehicle then
+            playerDrivingVehicle = true
+            log("Vehicle trigger -> ON (%s: R2='%s', L2='%s')", reason or "enter", VEHICLE_R2_FIXED_CMD, VEHICLE_L2_FIXED_CMD)
+        end
+        if not prevInMenuOrNonGameplay then
+            applyFixedVehicleTriggers()
+        end
+    else
+        activeVehicleRef = nil
+        if playerDrivingVehicle then
+            playerDrivingVehicle = false
+            releaseAllFallbackTriggers()
+            log("Vehicle trigger -> OFF (%s)", reason or "exit")
+        end
+    end
+end
+
+local function refreshVehicleStateFromEvent(vehCandidate, reason)
+    ExecuteWithDelay(60, function()
+        ExecuteInGameThread(function()
+            if not bridgeState.connected then return end
+            pcall(function()
+                if vehCandidate and vehCandidate:IsValid() and vehCandidate:IsPlayerDriving() == true then
+                    setPlayerDrivingState(true, vehCandidate, reason)
+                    return
+                end
+                if activeVehicleRef and activeVehicleRef:IsValid() and activeVehicleRef:IsPlayerDriving() == true then
+                    setPlayerDrivingState(true, activeVehicleRef, reason)
+                    return
+                end
+                -- If HUD vehicle flag is active (e.g. cutscene placed player in car), find the driven vehicle once
+                local hudFound, hudMask = readHudStateMask()
+                if hudFound and (hudMask & 1) ~= 0 then
+                    local vehicles = FindAllOf("H13Vehicle")
+                    if vehicles then
+                        for _, veh in ipairs(vehicles) do
+                            if veh:IsValid() and veh:IsPlayerDriving() == true then
+                                setPlayerDrivingState(true, veh, reason)
+                                return
+                            end
+                        end
+                    end
+                end
+                setPlayerDrivingState(false, nil, reason)
+            end)
+        end)
+    end)
+end
+
 local function updateGameplayTriggersAndLightbar()
     if not bridgeState.connected then return end
     local hudFound, hudMask = readHudStateMask()
@@ -667,31 +730,11 @@ local function updateGameplayTriggersAndLightbar()
         return
     end
 
-    -- Check driving state first (apply on any side not currently driven natively)
-    local drivingActive = false
-    pcall(function()
-        local vehicles = FindAllOf("H13Vehicle")
-        if not vehicles then return end
-        for _, veh in ipairs(vehicles) do
-            if veh:IsValid() and veh:IsPlayerDriving() == true then
-                local speed = math.abs(tonumber(veh:GetSpeedometerVelocity()) or 0.0)
-                local topSpeed = math.max(20.0, tonumber(veh:GetTopSpeed()) or 100.0)
-                local power = math.abs(tonumber(veh:GetPower()) or 0.0)
-                local brake = math.abs(tonumber(veh:GetBrake()) or 0.0)
-                local ratio = clamp(speed / topSpeed, 0.0, 1.0)
-
-                local accelStartStr = safeRound(1 + ratio * 2 + power * 1, 1, 5)
-                local accelEndStr = safeRound(3 + ratio * 3 + power * 1, 2, 7)
-                sendFallbackTrigger(1, string.format("TRIG_SLOPE 1 2 8 %d %d", accelStartStr, accelEndStr))
-
-                local brakeStr = safeRound(2 + ratio * 4 + brake * 1, 2, 7)
-                sendFallbackTrigger(0, string.format("TRIG_FEEDBACK 0 2 %d", brakeStr))
-                drivingActive = true
-                return
-            end
-        end
-    end)
-    if drivingActive then return end
+    -- Event-driven fixed vehicle triggers (managed by H13Vehicle & HUDStateManagerComponent hooks; no polling)
+    if playerDrivingVehicle then
+        applyFixedVehicleTriggers()
+        return
+    end
 
     -- Check horseback riding
     local ridingActive = false
@@ -1087,6 +1130,27 @@ local function registerCoreHooks()
         end)
     end)
 
+    -- Event-driven Vehicle Enter/Exit Trigger Hooks (zero polling loop)
+    safeHook("/Script/H13Vehicles.H13Vehicle:OnDriverEntered", function(vehSelf)
+        refreshVehicleStateFromEvent(vehSelf, "OnDriverEntered")
+    end)
+
+    safeHook("/Script/H13Vehicles.H13Vehicle:ReceiveCharacterEntered", function(vehSelf)
+        refreshVehicleStateFromEvent(vehSelf, "ReceiveCharacterEntered")
+    end)
+
+    safeHook("/Script/H13Vehicles.H13Vehicle:ReceiveCharacterLeft", function(vehSelf)
+        refreshVehicleStateFromEvent(vehSelf, "ReceiveCharacterLeft")
+    end)
+
+    safeHook("/Script/H13Vehicles.H13Vehicle:OnCharacterChangedSeat", function(vehSelf)
+        refreshVehicleStateFromEvent(vehSelf, "OnCharacterChangedSeat")
+    end)
+
+    safeHook("/Script/NeroUI.HUDStateManagerComponent:UpdateCurrentHUDState", function()
+        refreshVehicleStateFromEvent(nil, "UpdateCurrentHUDState")
+    end)
+
     -- Horse C++ Haptic Hooks
     safeHook("/Script/Nero.NeroHorseRiderComponent:OnHorseSprint", function(comp)
         if not bridgeState.connected then return end
@@ -1216,6 +1280,9 @@ ExecuteInGameThread(function()
                 tryRegisterGameplayBPHooks()
                 refreshBridgeState(true)
                 enforcePlayStationPrompts()
+                playerDrivingVehicle = false
+                activeVehicleRef = nil
+                refreshVehicleStateFromEvent(nil, "ClientRestart")
                 updateGameplayTriggersAndLightbar()
             end)
         end)
