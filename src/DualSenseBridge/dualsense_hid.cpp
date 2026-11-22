@@ -125,9 +125,24 @@ void DualSenseHidManager::AddExtraRumble(uint8_t left, uint8_t right, uint32_t d
 }
 
 void DualSenseHidManager::SetTrigger(uint8_t side, const TriggerConfig& cfg) {
+    uint8_t gate = ComputeWeaponGateThreshold(cfg);
     std::lock_guard<std::mutex> lk(outMutex_);
-    if (side == 0 || side == 2) triggerL2_ = cfg;
-    if (side == 1 || side == 2) triggerR2_ = cfg;
+    if (side == 0 || side == 2) {
+        triggerL2_ = cfg;
+        uint8_t prev = weaponGateL2_.exchange(gate, std::memory_order_relaxed);
+        if (prev != gate) {
+            BridgeLog("HID: L2 weapon trigger gate -> %u (mode=%u p0=%u p1=%u p2=%u)",
+                      gate, static_cast<unsigned>(cfg.mode), cfg.p0, cfg.p1, cfg.p2);
+        }
+    }
+    if (side == 1 || side == 2) {
+        triggerR2_ = cfg;
+        uint8_t prev = weaponGateR2_.exchange(gate, std::memory_order_relaxed);
+        if (prev != gate) {
+            BridgeLog("HID: R2 weapon trigger gate -> %u (mode=%u p0=%u p1=%u p2=%u)",
+                      gate, static_cast<unsigned>(cfg.mode), cfg.p0, cfg.p1, cfg.p2);
+        }
+    }
     outputDirty_ = true;
 }
 
@@ -334,6 +349,27 @@ void DualSenseHidManager::ForceNeutralOnProcessExit() {
     }
 }
 
+static uint8_t ApplyWeaponTriggerGate(uint8_t raw, uint8_t fireThreshold, bool& latched) {
+    if (fireThreshold == 0) {
+        latched = false;
+        return raw;
+    }
+    uint8_t releaseThreshold = (fireThreshold > 22) ? static_cast<uint8_t>(fireThreshold - 22) : 0;
+    if (!latched) {
+        if (raw >= fireThreshold) {
+            latched = true;
+            return 255;
+        }
+        return 0;
+    } else {
+        if (raw <= releaseThreshold) {
+            latched = false;
+            return 0;
+        }
+        return 255;
+    }
+}
+
 void DualSenseHidManager::ReadThreadLoop(void* rawHandle, std::atomic<bool>& deviceAlive) {
     HANDLE h = static_cast<HANDLE>(rawHandle);
     OVERLAPPED ov{};
@@ -343,6 +379,8 @@ void DualSenseHidManager::ReadThreadLoop(void* rawHandle, std::atomic<bool>& dev
         return;
     }
 
+    bool l2Latched = false;
+    bool r2Latched = false;
     uint8_t buf[USB_INPUT_REPORT_LEN]{};
     while (running_ && deviceAlive) {
         ResetEvent(ov.hEvent);
@@ -374,11 +412,13 @@ void DualSenseHidManager::ReadThreadLoop(void* rawHandle, std::atomic<bool>& dev
             int16_t ly = ScaleAxis(buf[2], true);
             int16_t rx = ScaleAxis(buf[3], false);
             int16_t ry = ScaleAxis(buf[4], true);
-            uint8_t l2 = buf[5];
-            uint8_t r2 = buf[6];
+            uint8_t rawL2 = buf[5];
+            uint8_t rawR2 = buf[6];
+            uint8_t l2 = ApplyWeaponTriggerGate(rawL2, weaponGateL2_.load(std::memory_order_relaxed), l2Latched);
+            uint8_t r2 = ApplyWeaponTriggerGate(rawR2, weaponGateR2_.load(std::memory_order_relaxed), r2Latched);
 
             bool significantInput =
-                (btns != 0) || guide || touch || (l2 > 15) || (r2 > 15) ||
+                (btns != 0) || guide || touch || (rawL2 > 15) || (rawR2 > 15) ||
                 (std::abs(lx) > 6000) || (std::abs(ly) > 6000) ||
                 (std::abs(rx) > 6000) || (std::abs(ry) > 6000);
 

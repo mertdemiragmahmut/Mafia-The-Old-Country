@@ -61,6 +61,8 @@ private:
 
     TriggerConfig triggerL2_{};
     TriggerConfig triggerR2_{};
+    std::atomic<uint8_t> weaponGateL2_{0};
+    std::atomic<uint8_t> weaponGateR2_{0};
 
     // Lightbar layering: default -> baseOverride -> specialEffect
     LedBehavior defaultLed_{LedEffectType::Default, 18, 56, 130, 0.0f, 1.0f}; // subtle Sicilian night blue
