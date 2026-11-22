@@ -1,21 +1,22 @@
 $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$BinSrc = Join-Path $Root "MafiaTheOldCountry\Binaries\Win64"
-$Ue4ssSrc = Join-Path $BinSrc "ue4ss"
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$VendorUe4ss = Join-Path $RepoRoot "vendor\ue4ss"
+$Ue4ssSrc = Join-Path $RepoRoot "src\UE4SS"
 $DistDir = Join-Path $Root "DualSenseModDev\dist"
 $BuildDir = Join-Path $Root "DualSenseModDev\build"
 $StageDir = Join-Path $BuildDir "stage_payload"
 $ZipPath = Join-Path $BuildDir "MafiaTOCDualSensePayload.zip"
 $CsPath = Join-Path $Root "DualSenseModDev\src\Installer\Program.cs"
-$DistExe = Join-Path $DistDir "MafiaTheOldCountry_DualSenseMod_Kur_Kaldir.exe"
-$RootExe = Join-Path $Root "MafiaTheOldCountry_DualSenseMod_Kur_Kaldir.exe"
+$DistExe = Join-Path $DistDir "MafiaTheOldCountry_DualSenseMod_Installer.exe"
+$RootExe = Join-Path $Root "MafiaTheOldCountry_DualSenseMod_Installer.exe"
 
 $NetDir = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319"
 $Csc = Join-Path $NetDir "csc.exe"
 if (-not (Test-Path $Csc)) { throw "csc.exe not found at $Csc" }
 
-Write-Host "=== Building Single-File Turkish DualSense Mod Installer ===" -ForegroundColor Cyan
+Write-Host "=== Building Single-File DualSense Mod Installer ===" -ForegroundColor Cyan
 
 # Clean and recreate staging directories
 if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
@@ -25,14 +26,14 @@ New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
 New-Item -ItemType Directory -Path $DistDir  -Force | Out-Null
 
 $payloadMap = @(
-    @{ Src = (Join-Path $BinSrc "dwmapi.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\dwmapi.dll" },
+    @{ Src = (Join-Path $VendorUe4ss "dwmapi.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\dwmapi.dll" },
     @{ Src = (Join-Path $DistDir "xinput1_4.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\xinput1_4.dll" },
-    @{ Src = (Join-Path $Ue4ssSrc "UE4SS.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.dll" },
-    @{ Src = (Join-Path $Ue4ssSrc "LICENSE"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\LICENSE" },
+    @{ Src = (Join-Path $VendorUe4ss "UE4SS.dll"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS.dll" },
+    @{ Src = (Join-Path $VendorUe4ss "LICENSE"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\LICENSE" },
     @{ Src = (Join-Path $Ue4ssSrc "UE4SS-settings.ini"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\UE4SS-settings.ini" },
     @{ Src = (Join-Path $Ue4ssSrc "MemberVariableLayout.ini"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\MemberVariableLayout.ini" },
     @{ Src = (Join-Path $Ue4ssSrc "Mods\mods.txt"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\mods.txt" },
-    @{ Src = (Join-Path $Ue4ssSrc "Mods\shared\UEHelpers\UEHelpers.lua"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\shared\UEHelpers\UEHelpers.lua" },
+    @{ Src = (Join-Path $VendorUe4ss "Mods\shared\UEHelpers\UEHelpers.lua"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\shared\UEHelpers\UEHelpers.lua" },
     @{ Src = (Join-Path $Ue4ssSrc "Mods\MafiaDualSenseMod\enabled.txt"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\MafiaDualSenseMod\enabled.txt" },
     @{ Src = (Join-Path $Ue4ssSrc "Mods\MafiaDualSenseMod\Scripts\main.lua"); Rel = "MafiaTheOldCountry\Binaries\Win64\ue4ss\Mods\MafiaDualSenseMod\Scripts\main.lua" }
 )
