@@ -104,6 +104,15 @@ inline uint8_t NormalizeStrength08(uint8_t v) {
     return ClampU8((static_cast<int>(v) * 8 + 127) / 255, 1, 8);
 }
 
+inline uint8_t ComputeWeaponGateThreshold(const TriggerConfig& cfg) {
+    if (cfg.mode != TriggerMode::Weapon) return 0;
+    if (NormalizeStrength08(cfg.p2) == 0) return 0;
+    uint8_t start = ClampU8(NormalizePos09(cfg.p0), 0, 7);
+    uint8_t end = ClampU8(NormalizePos09(cfg.p1), start + 1, 8);
+    int thresh = (static_cast<int>(end) * 255 + 4) / 9 + 8;
+    return ClampU8(thresh, 140, 242);
+}
+
 inline void EncodeTriggerBlock(uint8_t* out11, const TriggerConfig& cfg) {
     std::memset(out11, 0, 11);
     switch (cfg.mode) {

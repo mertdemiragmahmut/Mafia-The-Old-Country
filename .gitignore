@@ -1,6 +1,6 @@
 # Build & packaging outputs
 build/
-dist/
+dist/*
 
 # Downloaded archives & live reflection dumps
 downloads/
@@ -15,3 +15,8 @@ dumps/
 *.pdb
 *.zip
 *.log
+
+# Track vendored UE4SS runtime and English installer EXE on GitHub
+!vendor/ue4ss/dwmapi.dll
+!vendor/ue4ss/UE4SS.dll
+!dist/MafiaTheOldCountry_DualSenseMod_Installer.exe
