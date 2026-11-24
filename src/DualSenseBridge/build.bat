@@ -15,7 +15,7 @@ cl.exe /nologo /O2 /EHsc /W3 /std:c++17 /MD /DUNICODE /D_UNICODE /D_CRT_SECURE_N
     dualsense_hid.cpp wasapi_haptics.cpp pipe_server.cpp dllmain.cpp ^
     /Fe:"%DIST_DIR%\xinput1_4.dll" ^
     /link /DEF:"xinput1_4.def" /IMPLIB:"%DIST_DIR%\xinput1_4.lib" ^
-    hid.lib setupapi.lib ole32.lib avrt.lib user32.lib advapi32.lib
+    setupapi.lib ole32.lib avrt.lib user32.lib advapi32.lib
 if errorlevel 1 (
     popd
     exit /b 1

@@ -681,13 +681,13 @@ local function updateGameplayTriggersAndLightbar()
         if inMenuOrNonGameplay then
             if hudFound and (hudMask & 8) ~= 0 then
                 -- Loading screen: solid warm Sicilian amber
-                sendBaseLed(0, 180, 110, 25, 0.0, 1.0, "Loading (amber)")
+                sendBaseLed(0, 215, 130, 20, 0.0, 1.0, "Loading (amber)")
             elseif (hudFound and (hudMask & 4) ~= 0) or isCinematicPlaying() then
                 -- Cutscene: subtle dim midnight blue
-                sendBaseLed(0, 8, 18, 45, 0.0, 1.0, "Cinematic (dim blue)")
+                sendBaseLed(0, 10, 28, 80, 0.0, 1.0, "Cinematic (dim blue)")
             else
                 -- Menu / idle: calm solid Mediterranean cobalt blue
-                sendBaseLed(0, 18, 60, 155, 0.0, 1.0, "Menu/Idle (blue)")
+                sendBaseLed(0, 0, 85, 235, 0.0, 1.0, "Menu/Idle (blue)")
             end
         else
             local burning, inGas = false, false
@@ -716,17 +716,17 @@ local function updateGameplayTriggersAndLightbar()
             end)
 
             if burning then
-                sendBaseLed(0, 255, 85, 0, 0.0, 1.0, "Burning (orange)")
+                sendBaseLed(0, 255, 75, 0, 0.0, 1.0, "Burning (orange)")
             elseif inGas then
-                sendBaseLed(0, 55, 200, 35, 0.0, 1.0, "Gas (green)")
+                sendBaseLed(0, 40, 225, 35, 0.0, 1.0, "Gas (green)")
             elseif isBandagePulsing then
-                sendBaseLed(2, 220, 18, 18, 0.0, 1.1, "Critical Health Bandage (red pulse)")
+                sendBaseLed(2, 235, 18, 18, 0.0, 1.1, "Critical Health Bandage (red pulse)")
             elseif inCombat or trespassState == 2 then
-                sendBaseLed(0, 195, 20, 20, 0.0, 1.0, "Combat/Hostile (crimson)")
+                sendBaseLed(0, 235, 20, 20, 0.0, 1.0, "Combat/Hostile (crimson)")
             elseif trespassState == 1 then
-                sendBaseLed(0, 215, 140, 18, 0.0, 1.0, "Trespassing (amber)")
+                sendBaseLed(0, 245, 155, 0, 0.0, 1.0, "Trespassing (amber)")
             else
-                sendBaseLed(0, 24, 72, 168, 0.0, 1.0, "Explore (Sicilian blue)")
+                sendBaseLed(0, 0, 110, 255, 0.0, 1.0, "Explore (Sicilian blue)")
             end
         end
     end
@@ -1040,8 +1040,17 @@ local function registerCoreHooks()
             local r = safeRound(col.R, 0, 255)
             local g = safeRound(col.G, 0, 255)
             local b = safeRound(col.B, 0, 255)
-            nativeBaseLedOverride = true
-            sendCmd(string.format("LED_COLOR %d %d %d", r, g, b))
+            if (r + g + b) <= 0 then
+                nativeBaseLedOverride = false
+                lastSentBaseLedCmd = ""
+                sendCmd("LED_STOP_BASE")
+                log("Native SetControllerLightColor -> RGB(0,0,0) released to contextual lightbar")
+            else
+                nativeBaseLedOverride = true
+                lastSentBaseLedCmd = ""
+                sendCmd(string.format("LED_BASE 0 %d %d %d 0.00 1.00", r, g, b))
+                log("Native SetControllerLightColor -> RGB(%d,%d,%d)", r, g, b)
+            end
         end)
     end)
 
